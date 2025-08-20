@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -24,8 +25,11 @@ public class DialogBulkProvision extends JDialog {
     private final JButton connectButton;
     private final JButton setupButton;
     private final JButton listButton;
+    private final JButton stopButton;
+    private final JCheckBox continuousScanCheckBox;
 
     private final ProvisioningController controller;
+    private SwingWorker<Void, Void> backgroundWorker;
 
     public DialogBulkProvision(MainView owner) {
         super(owner, "Bulk Shelly Provisioner", false);
@@ -47,11 +51,15 @@ public class DialogBulkProvision extends JDialog {
         connectButton = new JButton("Connect");
         setupButton = new JButton("Setup");
         listButton = new JButton("List Devices");
+        stopButton = new JButton("Stop");
+        continuousScanCheckBox = new JCheckBox("Continuous Scan");
 
         buttonPanel.add(discoverButton);
         buttonPanel.add(connectButton);
         buttonPanel.add(setupButton);
         buttonPanel.add(listButton);
+        buttonPanel.add(continuousScanCheckBox);
+        buttonPanel.add(stopButton);
         
         // Main content panel
         JPanel contentPanel = new JPanel(new BorderLayout());
@@ -64,10 +72,23 @@ public class DialogBulkProvision extends JDialog {
         // Controller and Listeners
         controller = new ProvisioningController(this::logToTextArea);
 
-        discoverButton.addActionListener(e -> runBackgroundTask(controller::discoverDevices));
+        discoverButton.addActionListener(e -> {
+            if (continuousScanCheckBox.isSelected()) {
+                runBackgroundTask(controller::startContinuousDiscovery);
+            } else {
+                runBackgroundTask(controller::discoverDevices);
+            }
+        });
         connectButton.addActionListener(e -> runBackgroundTask(controller::connectDevices));
         setupButton.addActionListener(e -> runBackgroundTask(controller::setupDevices));
         listButton.addActionListener(e -> runBackgroundTask(controller::listDevices));
+        stopButton.addActionListener(e -> {
+            if (backgroundWorker != null && !backgroundWorker.isDone()) {
+                backgroundWorker.cancel(true);
+            }
+        });
+
+        stopButton.setVisible(false); // Hide by default
 
         pack();
         setLocationRelativeTo(owner);
@@ -81,9 +102,10 @@ public class DialogBulkProvision extends JDialog {
 
     private void runBackgroundTask(Runnable task) {
         setButtonsEnabled(false);
+        stopButton.setVisible(true);
         logArea.setText(""); // Clear log on new task
 
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+        backgroundWorker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 task.run();
@@ -93,10 +115,11 @@ public class DialogBulkProvision extends JDialog {
             @Override
             protected void done() {
                 setButtonsEnabled(true);
+                stopButton.setVisible(false);
                 logToTextArea("\nTask finished.");
             }
         };
-        worker.execute();
+        backgroundWorker.execute();
     }
 
     private void setButtonsEnabled(boolean enabled) {

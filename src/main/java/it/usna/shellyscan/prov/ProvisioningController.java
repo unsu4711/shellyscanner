@@ -59,6 +59,20 @@ public class ProvisioningController {
         log("--- Discovery Pass Complete ---");
     }
 
+    public void startContinuousDiscovery() {
+        log("Entering continuous Discovery Mode. Press 'Stop' to exit.");
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                discoverDevices();
+                log("Scan complete. Waiting " + config.getScanLoopDelaySeconds() + " seconds before next scan...");
+                Thread.sleep(config.getScanLoopDelaySeconds() * 1000);
+            }
+        } catch (InterruptedException e) {
+            log("Continuous discovery stopped.");
+            Thread.currentThread().interrupt(); // Preserve the interrupted status
+        }
+    }
+
     public void connectDevices() {
         log("--- Starting Shelly Connection Pass ---");
         Map<String, ProvisionedShellyDevice> devices = deviceStore.loadDiscoveredDevices();
