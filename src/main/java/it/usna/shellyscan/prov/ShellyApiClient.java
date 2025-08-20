@@ -104,6 +104,32 @@ public class ShellyApiClient {
         return null;
     }
 
+    public boolean waitForShellyApReachable(int timeoutSeconds) {
+        long startTime = System.currentTimeMillis();
+        long timeoutMillis = timeoutSeconds * 1000L;
+        String url = "http://" + SHELLY_DEFAULT_IP + "/shelly";
+
+        while (System.currentTimeMillis() - startTime < timeoutMillis) {
+            try {
+                var response = httpClient.GET(url);
+                if (response.getStatus() == 200) {
+                    System.out.println("Shelly AP is reachable.");
+                    return true;
+                }
+            } catch (Exception e) {
+                // Ignore and retry
+            }
+            try {
+                Thread.sleep(2000); // Wait 2 seconds before retrying
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        System.err.println("Shelly AP did not become reachable within " + timeoutSeconds + " seconds.");
+        return false;
+    }
+
     public boolean setShellyDeviceName(String ipAddress, int generation, String name) {
         try {
             if (generation >= 2) {

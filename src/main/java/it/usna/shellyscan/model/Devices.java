@@ -67,6 +67,10 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 
 	private JmmDNS jd;
 	private Set<JmDNS> bjServices = new HashSet<>();
+ 
+ 	// mDNS control
+ 	private boolean fullScanMode = false;
+ 	private MDNSListener mdnsListener; // persistent listener used across pause/resume
 
 	private IPCollection ipCollection = null;
 
@@ -98,13 +102,14 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 	public void scannerInit(boolean fullScan, int refreshInterval, int refreshTics, boolean autorelod) throws IOException {
 		this.refreshInterval = refreshInterval;
 		this.refreshTics = refreshTics;
-		final MDNSListener dnsListener = new MDNSListener();
+		this.fullScanMode = fullScan;
+		this.mdnsListener = new MDNSListener();
 		if(fullScan) {
 			jd = JmmDNS.Factory.getInstance();
 			for(JmDNS dns: jd.getDNS()) {
 				bjServices.add(dns);
 				LOG.debug("Full scan {} {}", dns.getName(), dns.getInetAddress());
-				dns.addServiceListener(SERVICE_TYPE1, dnsListener);
+				dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
 //				dns.addServiceListener(SERVICE_TYPE2, dnsListener);
 			}
 			jd.addNetworkTopologyListener(new NetworkTopologyListener() {
@@ -121,7 +126,7 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 					try {
 						LOG.debug("DNS add {} {}", dns.getName(), dns.getInetAddress());
 						bjServices.add(dns);
-						dns.addServiceListener(SERVICE_TYPE1, dnsListener);
+						dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
 //						dns.addServiceListener(SERVICE_TYPE2, dnsListener);
 					} catch (IOException e) {
 						LOG.error("DNS add {}", dns.getName(), e);
@@ -135,7 +140,7 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 			final JmDNS dns = JmDNS.create(/*network == null ? InetAddress.getLocalHost() : network*/InetAddress.getLocalHost(), null);
 			bjServices.add(dns);
 			LOG.debug("Local scan: {} {}", dns.getName(), dns.getInetAddress());
-			dns.addServiceListener(SERVICE_TYPE1, dnsListener);
+			dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
 //			dns.addServiceListener(SERVICE_TYPE2, dnsListener);
 		}
 		fireEvent(EventType.READY);
@@ -286,6 +291,24 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 					}
 				}, MULTI_QUERY_DELAY, TimeUnit.MILLISECONDS);
 			}
+		}
+	}
+
+	public void stopAllRefreshes() {
+		synchronized(devices) {
+			for (int i = 0; i < refreshProcess.size(); i++) {
+				pauseRefresh(i);
+			}
+			LOG.debug("All device refresh timers stopped.");
+		}
+	}
+
+	public void startAllRefreshes() {
+		synchronized(devices) {
+			for (int i = 0; i < refreshProcess.size(); i++) {
+				activateRefresh(i);
+			}
+			LOG.debug("All device refresh timers restarted.");
 		}
 	}
 
@@ -618,6 +641,49 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 			LOG.error("httpClient.stop", e);
 		}
 		LOG.debug("Model closed");
+	}
+
+	/**
+	 * Temporarily close all mDNS sockets to avoid errors while network interface changes (e.g., provisioning).
+	 */
+	public synchronized void pauseMdns() {
+		try {
+			for (JmDNS dns : bjServices) {
+				try { dns.close(); } catch (IOException e) { LOG.debug("pauseMdns JmDNS.close", e); }
+			}
+			bjServices.clear();
+			if (jd != null) {
+				try { jd.close(); } catch (IOException e) { LOG.debug("pauseMdns JmmDNS.close", e); }
+				jd = null;
+			}
+			LOG.debug("mDNS paused (all JmDNS/JmmDNS closed)");
+		} catch (RuntimeException ex) {
+			LOG.warn("pauseMdns unexpected", ex);
+		}
+	}
+
+	/**
+	 * Recreate mDNS listeners after pause.
+	 */
+	public synchronized void resumeMdns() {
+		try {
+			if (fullScanMode) {
+				jd = JmmDNS.Factory.getInstance();
+				for (JmDNS dns : jd.getDNS()) {
+					bjServices.add(dns);
+					LOG.debug("Resume full scan {} {}", dns.getName(), dns.getInetAddress());
+					dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
+				}
+			} else {
+				final JmDNS dns = JmDNS.create(null, null);
+				bjServices.add(dns);
+				LOG.debug("Resume local scan {} {}", dns.getName(), dns.getInetAddress());
+				dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
+			}
+			LOG.debug("mDNS resumed");
+		} catch (IOException ex) {
+			LOG.error("resumeMdns", ex);
+		}
 	}
 
 	private final class MDNSListener implements ServiceListener {

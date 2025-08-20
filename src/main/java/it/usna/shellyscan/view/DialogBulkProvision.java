@@ -15,6 +15,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 
 import it.usna.shellyscan.Main;
+import it.usna.shellyscan.model.Devices;
 import it.usna.shellyscan.prov.ProvisioningController;
 
 public class DialogBulkProvision extends JDialog {
@@ -31,7 +32,7 @@ public class DialogBulkProvision extends JDialog {
     private final ProvisioningController controller;
     private SwingWorker<Void, Void> backgroundWorker;
 
-    public DialogBulkProvision(MainView owner) {
+    public DialogBulkProvision(MainView owner, Devices model) {
         super(owner, "Bulk Shelly Provisioner", false);
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setIconImage(Main.ICON);
@@ -70,13 +71,13 @@ public class DialogBulkProvision extends JDialog {
         getContentPane().add(contentPanel);
 
         // Controller and Listeners
-        controller = new ProvisioningController(this::logToTextArea);
+        controller = new ProvisioningController(model, this::logToTextArea);
 
         discoverButton.addActionListener(e -> {
             if (continuousScanCheckBox.isSelected()) {
                 runBackgroundTask(controller::startContinuousDiscovery);
             } else {
-                runBackgroundTask(controller::discoverDevices);
+                runBackgroundTask(controller::discoverShellyAPs);
             }
         });
         connectButton.addActionListener(e -> runBackgroundTask(controller::connectDevices));

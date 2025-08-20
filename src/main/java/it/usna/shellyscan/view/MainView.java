@@ -542,7 +542,7 @@ public class MainView extends MainWindow implements UsnaEventListener<Devices.Ev
 	}
 	
 	private void showBulkProvisionDialog() {
-		DialogBulkProvision dialog = new DialogBulkProvision(this);
+		DialogBulkProvision dialog = new DialogBulkProvision(this, model);
 		dialog.setVisible(true);
 	}
 

@@ -9,16 +9,41 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
+import java.util.function.Consumer;
 
 public class NetshWifiManager {
 
     private static final String SHELLY_AP_SSID_REGEX = "^Shelly.*-\\w*$";
     private final Pattern shellyApPattern = Pattern.compile(SHELLY_AP_SSID_REGEX, Pattern.CASE_INSENSITIVE);
     private final Pattern ssidPattern = Pattern.compile("^SSID \\d+ : (.+)$");
+    private final Pattern currentSsidPattern = Pattern.compile("^\\s*SSID\\s*: (.+)$");
+    private final Consumer<String> logger;
+
+    public NetshWifiManager(Consumer<String> logger) {
+        this.logger = logger;
+    }
+
+    public Optional<String> getCurrentSsid() {
+        try {
+            log("Executing: netsh wlan show interfaces");
+            String commandOutput = runCommand("netsh", "wlan", "show", "interfaces");
+            for (String line : commandOutput.split("\\r?\\n")) {
+                Matcher matcher = currentSsidPattern.matcher(line);
+                if (matcher.matches()) {
+                    return Optional.of(matcher.group(1).trim());
+                }
+            }
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        return Optional.empty();
+    }
 
     public List<String> scanForShellyAPs() {
         List<String> foundShellyAPs = new ArrayList<>();
         try {
+            log("Executing: netsh wlan show networks");
             String commandOutput = runCommand("netsh", "wlan", "show", "networks");
             
             for (String line : commandOutput.split("\\r?\\n")) {
@@ -38,23 +63,30 @@ public class NetshWifiManager {
 
     public boolean connect(String ssid, String password) {
         try {
+            log("Generating Wi-Fi profile for: " + ssid);
             String profileXml = generateWifiProfileXml(ssid, password);
             Path profilePath = Files.createTempFile(ssid + "_profile", ".xml");
             Files.writeString(profilePath, profileXml);
 
             // Using "name=" and "filename=" with quotes to handle SSIDs with spaces
+            log("Executing: netsh wlan delete profile name=\"" + ssid + "\"");
             runCommand("netsh", "wlan", "delete", "profile", "name=\"" + ssid + "\"");
             Thread.sleep(1000); // Small delay for profile deletion
             
+            log("Executing: netsh wlan add profile filename=\"" + profilePath.toAbsolutePath().toString() + "\"");
             runCommand("netsh", "wlan", "add", "profile", "filename=\"" + profilePath.toAbsolutePath().toString() + "\"");
             Thread.sleep(1000); // Small delay for profile addition
 
+            log("Executing: netsh wlan connect name=\"" + ssid + "\"");
             runCommand("netsh", "wlan", "connect", "name=\"" + ssid + "\"");
+            log("Waiting for connection to establish...");
             Thread.sleep(10000); // Wait for connection to establish
 
             Files.delete(profilePath);
+            log("Successfully connected to " + ssid);
             return true;
         } catch (IOException | InterruptedException e) {
+            log("ERROR connecting to " + ssid + ": " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -62,9 +94,11 @@ public class NetshWifiManager {
 
     public boolean disconnect() {
         try {
+            log("Executing: netsh wlan disconnect");
             runCommand("netsh", "wlan", "disconnect");
             return true;
         } catch (IOException | InterruptedException e) {
+            log("ERROR disconnecting: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -127,6 +161,12 @@ public class NetshWifiManager {
         }
     }
 
+    private void log(String message) {
+        if (logger != null) {
+            logger.accept(message);
+        }
+    }
+
     private String runCommand(String... command) throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
@@ -142,7 +182,9 @@ public class NetshWifiManager {
 
         int exitCode = process.waitFor();
         if (exitCode != 0) {
-            System.err.println("Command failed with exit code " + exitCode + ": " + String.join(" ", command));
+            String errorMsg = "Command failed with exit code " + exitCode + ": " + String.join(" ", command);
+            log(errorMsg);
+            System.err.println(errorMsg);
             System.err.println("Output:\n" + output);
         }
 
