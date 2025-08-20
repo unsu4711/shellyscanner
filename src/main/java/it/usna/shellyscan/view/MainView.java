@@ -124,6 +124,8 @@ public class MainView extends MainWindow implements UsnaEventListener<Devices.Ev
 			LABELS.getString("col_relay"));
 	private final DevicesTable devicesTable = new DevicesTable(tabModel);
 
+	private Action bulkAction;
+
 	private Action infoAction = new UsnaSelectedAction(this, devicesTable, "action_info_name", "action_info_tooltip", "/images/Bubble3_16.png", "/images/Bubble3.png",
 			i -> new DialogDeviceInfo(MainView.this, model, i) );
 	
@@ -298,6 +300,10 @@ public class MainView extends MainWindow implements UsnaEventListener<Devices.Ev
 		backupAction = new BackupAction(this, devicesTable, appProp, model);
 		restoreAction = new RestoreAction(this, devicesTable, appProp, model);
 
+		bulkAction = new UsnaAction(this, "bulk.name", "bulk.tooltip", "/images/Tool.png", "/images/Tool.png", e -> {
+			showBulkProvisionDialog();
+		});
+
 		loadProperties(appProp, 0.66f, 0.5f);
 		
 		useArchive = appProp.getBoolProperty(ScannerProperties.PROP_USE_ARCHIVE, true);
@@ -417,6 +423,7 @@ public class MainView extends MainWindow implements UsnaEventListener<Devices.Ev
 		toolBar.addSeparator();
 		toolBar.add(devicesSettingsAction);
 		toolBar.add(scriptManagerAction);
+		toolBar.add(bulkAction);
 		toolBar.add(rebootAction);
 		toolBar.addSeparator();
 		toolBar.add(notesAction);
@@ -534,6 +541,11 @@ public class MainView extends MainWindow implements UsnaEventListener<Devices.Ev
 		rowsSelectionManager();
 	}
 	
+	private void showBulkProvisionDialog() {
+		DialogBulkProvision dialog = new DialogBulkProvision(this);
+		dialog.setVisible(true);
+	}
+
 	private void updateHideCaptions() {
 		boolean en = appProp.getBoolProperty(ScannerProperties.PROP_TOOLBAR_CAPTIONS) == false;
 		Stream.of(toolBar.getComponents()).filter(c -> c instanceof AbstractButton).forEach(b -> ((AbstractButton)b).setHideActionText(en));

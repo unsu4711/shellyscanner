@@ -1,0 +1,6 @@
+{
+    "HOME_WIFI_SSID": "jc_shelly",
+    "HOME_WIFI_PASSWORD": "12341234",
+    "GLOBAL_LOG_LEVEL": "DEBUG",
+    "SCAN_LOOP_DELAY_SECONDS": 25
+}
