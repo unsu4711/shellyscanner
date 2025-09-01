@@ -228,7 +228,7 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 					if(dns.getInetAddress().equals(InetAddress.getLocalHost()) == false) {
 						dns.close();
 						bjServices.clear();
-						dns = JmDNS.create(/*InetAddress.getLocalHost()*/null, null);
+						dns = JmDNS.create(InetAddress.getLocalHost(), null);
 						LOG.debug("New local scan interface: {} {}", dns.getName(), dns.getInetAddress());
 						bjServices.add(dns);
 						dns.addServiceListener(SERVICE_TYPE1, new MDNSListener());
@@ -674,8 +674,29 @@ public class Devices extends it.usna.util.UsnaObservable<Devices.EventType, Inte
 					LOG.debug("Resume full scan {} {}", dns.getName(), dns.getInetAddress());
 					dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
 				}
+				// Ensure we receive future interface changes after Wi-Fi switches
+				jd.addNetworkTopologyListener(new NetworkTopologyListener() {
+					@Override
+					public void inetAddressRemoved(NetworkTopologyEvent event) {
+						JmDNS dns = event.getDNS();
+						LOG.debug("DNS remove {}", dns.getName());
+						bjServices.remove(dns);
+					}
+
+					@Override
+					public void inetAddressAdded(NetworkTopologyEvent event) {
+						JmDNS dns = event.getDNS();
+						try {
+							LOG.debug("DNS add {} {}", dns.getName(), dns.getInetAddress());
+							bjServices.add(dns);
+							dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
+						} catch (IOException e) {
+							LOG.error("DNS add {}", dns.getName(), e);
+						}
+					}
+				});
 			} else {
-				final JmDNS dns = JmDNS.create(null, null);
+				final JmDNS dns = JmDNS.create(InetAddress.getLocalHost(), null);
 				bjServices.add(dns);
 				LOG.debug("Resume local scan {} {}", dns.getName(), dns.getInetAddress());
 				dns.addServiceListener(SERVICE_TYPE1, mdnsListener);
